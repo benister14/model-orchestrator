@@ -139,3 +139,13 @@ def test_router_long_context_routes_to_long_context_lane():
     model_name, endpoint = route(task, cfg)
     model_roles = cfg["models"][model_name]["roles"]
     assert any("long_context" in r for r in model_roles)
+
+
+def test_router_sensitive_architecture_stays_in_trusted_lane():
+    cfg = load_config()
+    task = {"description": "design secure auth system", "type": "architecture",
+            "complexity": 4, "risk": "high", "sensitive": True}
+    model_name, endpoint = route(task, cfg)
+    trusted_providers = set(cfg["lanes"]["trusted"]["providers"])
+    provider = cfg["models"][model_name]["provider"]
+    assert provider in trusted_providers

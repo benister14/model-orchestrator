@@ -50,6 +50,11 @@ def route(task: dict, cfg: dict) -> tuple[str, str | None]:
             f"no model configured for role='{role}', variant='{variant}'"
         )
 
+    if model_name not in cfg.get("models", {}):
+        raise RoutingError(
+            f"resolved model '{model_name}' not found in models registry"
+        )
+
     # ---- Lane enforcement for sensitive tasks ----
     if sensitive:
         trusted_providers = set(cfg["lanes"]["trusted"]["providers"])
