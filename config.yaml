@@ -1,0 +1,133 @@
+# Model Orchestrator — roster & routing config
+# Prices are USD per 1M tokens (input / output), verified ~June 2026.
+# Third-party trackers drift; confirm against each provider's pricing page
+# before relying on a number. The structure matters more than the digits.
+
+version: 1
+
+# ---- Lanes ------------------------------------------------------------
+# trusted = may handle sensitive / client / personal data (GDPR)
+# open    = non-sensitive only
+# Adding a provider to `trusted` requires human compliance sign-off.
+lanes:
+  trusted:
+    providers: [anthropic, mistral, google, openai]
+    note: >
+      OpenAI sensitive calls must use the EU data-residency endpoint
+      (and a residency-eligible model, e.g. gpt-5.5-codex).
+  open:
+    providers: [anthropic, mistral, google, openai, deepseek]
+
+# ---- Providers --------------------------------------------------------
+providers:
+  anthropic: { env: ANTHROPIC_API_KEY, residency: us, eu_endpoint: null }
+  openai:    { env: OPENAI_API_KEY,    residency: us, eu_endpoint: "https://eu.api.openai.com/v1" }
+  google:    { env: GEMINI_API_KEY,    residency: us, eu_endpoint: null }
+  mistral:   { env: MISTRAL_API_KEY,   residency: eu, eu_endpoint: null }
+  deepseek:  { env: DEEPSEEK_API_KEY,  residency: cn, eu_endpoint: null }
+
+# ---- Roster -----------------------------------------------------------
+# status:   trial | active | demoted | retired
+# eol_date: hard retirement date (auto-fired by the router); null if none
+models:
+  claude-sonnet-4-6:
+    provider: anthropic
+    price: { in: 3.00, out: 15.00 }
+    context: 1000000
+    status: active
+    eol_date: null
+    roles: [orchestrator, author, long_context_sensitive, judge_sensitive]
+  claude-opus-4-8:
+    provider: anthropic
+    price: { in: 5.00, out: 25.00 }
+    context: 1000000
+    status: active
+    eol_date: null
+    roles: [orchestrator_hard, meta_judge]
+  gemini-2.5-flash-lite:
+    provider: google
+    price: { in: 0.10, out: 0.40 }
+    context: 1000000
+    status: active
+    eol_date: null
+    roles: [prefilter, router]
+  gemini-3-flash:
+    provider: google
+    price: { in: 0.50, out: 3.00 }
+    context: 1000000
+    status: active
+    eol_date: null
+    roles: [judge, long_context_open]
+  deepseek-v4-flash:
+    provider: deepseek
+    price: { in: 0.14, out: 0.28 }
+    context: 1000000
+    status: active
+    eol_date: null
+    roles: [worker, long_context_open]
+  deepseek-v4-pro:
+    provider: deepseek
+    price: { in: 1.74, out: 3.48 }
+    context: 1000000
+    status: active
+    eol_date: null
+    roles: [reasoner, red_team_routine]
+  gpt-5.5-codex:
+    provider: openai
+    price: { in: 1.75, out: 14.00 }   # confirm 5.5-codex rate; 5.2/5.3-codex = 1.75/14
+    context: 400000
+    status: active
+    eol_date: null
+    roles: [red_team_code]
+  mistral-small:
+    provider: mistral
+    price: { in: 0.15, out: 0.60 }    # trackers vary 0.10-0.20 in / 0.30-0.60 out
+    context: 128000
+    status: active
+    eol_date: null
+    roles: [worker_sensitive, prefilter_sensitive]
+  mistral-magistral-medium:
+    provider: mistral
+    price: { in: 2.00, out: 5.00 }
+    context: 128000
+    status: active
+    eol_date: null
+    roles: [reasoner_sensitive, red_team_sensitive]
+  # --- legacy / retiring (kept for reference; auto-fired on eol_date) ---
+  deepseek-r1:
+    provider: deepseek
+    price: { in: 0.55, out: 2.19 }
+    context: 164000
+    status: retired
+    eol_date: 2026-07-24
+    roles: []
+
+# ---- Role -> model resolution -----------------------------------------
+# Sensitive tasks must resolve within the trusted lane (enforced at load).
+roles:
+  orchestrator:   { default: claude-sonnet-4-6, hard: claude-opus-4-8 }
+  prefilter:      { open: gemini-2.5-flash-lite, sensitive: mistral-small }
+  worker:         { open: deepseek-v4-flash,     sensitive: mistral-small }
+  long_context:   { open: gemini-3-flash,        sensitive: claude-sonnet-4-6 }
+  reasoner:       { open: deepseek-v4-pro,        sensitive: mistral-magistral-medium }
+  red_team:
+    routine:             deepseek-v4-pro
+    code:                gpt-5.5-codex
+    code_sensitive:      gpt-5.5-codex     # via OpenAI EU residency endpoint
+    reasoning_sensitive: mistral-magistral-medium
+  judge:          { default: gemini-3-flash, meta: claude-opus-4-8 }
+
+# ---- Thresholds (defaults; tune from logs after the P1 week) ----------
+thresholds:
+  skip_cheap_path_when: { max_complexity: 2, risk: low }   # also skips debate
+  debate:               { max_rounds: 2, stop_score_gap: 0.10 }
+  escalate_to_claude_when_judge_below: 0.75
+  fact_flags_escalate_above: 2
+  cost_ceiling_per_session_usd: 2.00   # placeholder; raise as needed
+
+# ---- Adaptive roster (P7 — built on the P4 logs) ----------------------
+adaptive:
+  enabled: false                  # turn on once P4 logs exist
+  metric: cost_per_accepted_output
+  refresh_cadence_days: 30        # re-check market prices / capabilities
+  require_human_approval: true    # always; trusted-lane changes are hard-gated

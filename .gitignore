@@ -1,0 +1,9 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+# run logs live in ~/.orchestrator/logs, never in the repo
+logs/
