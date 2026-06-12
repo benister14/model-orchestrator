@@ -6,3 +6,4 @@ class Adapter(ABC):
     @abstractmethod
     def complete(self, prompt: str, model: str, **kwargs) -> str:
         """Send prompt to model and return the response text."""
+        ...
