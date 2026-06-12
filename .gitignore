@@ -7,3 +7,6 @@ dist/
 build/
 # run logs live in ~/.orchestrator/logs, never in the repo
 logs/
+# pytest temp dirs
+*.pytest_tmp/
+.pytest_tmp/
