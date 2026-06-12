@@ -101,15 +101,17 @@ def cmd_route(args) -> int:
     from .adapters import get_adapter
     from .gate import gate, CostCeilingError
 
+    # load_dotenv() is called inside key_status; must happen before adapter init
+    # so that os.environ is populated when the SDK client reads the key.
+    keys = key_status(cfg)
+    if not keys.get(provider):
+        print(f"error: {provider.upper()}_API_KEY is not set — cannot make a live call", file=sys.stderr)
+        return 1
+
     try:
         adapter = get_adapter(provider)
     except ValueError as e:
         print(f"adapter error: {e}", file=sys.stderr)
-        return 1
-
-    keys = key_status(cfg)
-    if not keys.get(provider):
-        print(f"error: {provider.upper()}_API_KEY is not set — cannot make a live call", file=sys.stderr)
         return 1
 
     print("\ncalling API ...")
