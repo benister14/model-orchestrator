@@ -86,7 +86,7 @@ def cmd_route(args) -> int:
     print(f"provider:  {provider}")
     print(f"lane:      {lane}")
     print(f"type:      {tagged.get('type')}")
-    print(f"complexity:{tagged.get('complexity')}")
+    print(f"complexity: {tagged.get('complexity')}")
     print(f"risk:      {tagged.get('risk')}")
     print(f"sensitive: {tagged.get('sensitive', False)}")
     if endpoint:
@@ -105,6 +105,11 @@ def cmd_route(args) -> int:
         adapter = get_adapter(provider)
     except ValueError as e:
         print(f"adapter error: {e}", file=sys.stderr)
+        return 1
+
+    keys = key_status(cfg)
+    if not keys.get(provider):
+        print(f"error: {provider.upper()}_API_KEY is not set — cannot make a live call", file=sys.stderr)
         return 1
 
     print("\ncalling API ...")
@@ -141,7 +146,7 @@ def cmd_route(args) -> int:
     if result["flags"]:
         print(f"flags:  {', '.join(result['flags'])}")
     print(f"cost:   ${result['cost_usd']:.6f}")
-    return 0
+    return 0 if result["passed"] else 1
 
 
 def _stub(name: str, phase: str):
