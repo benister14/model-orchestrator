@@ -149,3 +149,16 @@ def test_router_sensitive_architecture_stays_in_trusted_lane():
     trusted_providers = set(cfg["lanes"]["trusted"]["providers"])
     provider = cfg["models"][model_name]["provider"]
     assert provider in trusted_providers
+
+
+from orchestrator.cli import main
+
+
+def test_dry_run_route_prints_model_and_cost_no_api_call(capsys):
+    ret = main(["route", "scaffold a CRUD API", "--dry-run"])
+    assert ret == 0
+    out = capsys.readouterr().out
+    assert "model:" in out
+    assert "lane:" in out
+    assert "est. cost:" in out
+    assert "[dry-run]" in out
