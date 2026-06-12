@@ -46,3 +46,36 @@ def test_gate_raises_on_cost_ceiling_breach(tmp_path, monkeypatch):
     # Zero-cost call should still be blocked because current_spend > ceiling.
     with pytest.raises(CostCeilingError):
         gate("output text", {"description": "anything"}, cfg)
+
+
+from orchestrator.prefilter import prefilter
+
+
+def test_prefilter_tags_code_task():
+    result = prefilter({"description": "scaffold a CRUD API endpoint"})
+    assert result["type"] == "code"
+    assert 1 <= result["complexity"] <= 5
+    assert result["risk"] in ("low", "medium", "high")
+    assert result["sensitive"] is False
+
+
+def test_prefilter_tags_architecture_task():
+    result = prefilter({"description": "design a distributed microservice architecture"})
+    assert result["type"] == "architecture"
+    assert result["complexity"] >= 3
+
+
+def test_prefilter_sets_sensitive_flag_on_caller_request():
+    result = prefilter({"description": "process user data"}, sensitive=True)
+    assert result["sensitive"] is True
+
+
+def test_prefilter_sets_sensitive_flag_on_pii_signal():
+    result = prefilter({"description": "send confirmation to jane.doe@corp.com"})
+    assert result["sensitive"] is True
+
+
+def test_prefilter_compresses_long_description():
+    long_desc = "word " * 200  # 1000-char description
+    result = prefilter({"description": long_desc})
+    assert len(result["description"]) <= 500
