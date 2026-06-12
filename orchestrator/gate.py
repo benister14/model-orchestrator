@@ -9,7 +9,7 @@ from pathlib import Path
 
 _PII_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("email",    re.compile(r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}')),
-    ("phone_fr", re.compile(r'\b(?:\+33|0)[1-9](?:[\s.\-]?\d{2}){4}\b')),
+    ("phone_fr", re.compile(r'\b(?:\+33\s?|0)[1-9](?:[\s.\-]?\d{2}){4}\b')),
     ("siren",    re.compile(r'\b\d{9}\b')),
     ("siret",    re.compile(r'\b\d{14}\b')),
 ]

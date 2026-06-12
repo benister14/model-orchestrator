@@ -20,3 +20,12 @@ def test_gate_passes_clean_output():
     result = gate(output, task, cfg)
     assert result["passed"] is True
     assert result["flags"] == []
+
+
+def test_gate_flags_pii_in_client_field():
+    cfg = load_config()
+    output = "Task completed successfully."
+    task = {"description": "process records", "client_email": "ceo@corp.com"}
+    result = gate(output, task, cfg)
+    assert result["passed"] is False
+    assert any("task.client_email" in f for f in result["flags"])
