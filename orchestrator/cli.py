@@ -159,6 +159,13 @@ def _stub(name: str, phase: str):
 
 
 def main(argv=None) -> int:
+    # Windows consoles default to cp1252; reconfigure to UTF-8 so model output
+    # containing em-dashes, curly quotes, etc. doesn't crash the CLI.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
     p = argparse.ArgumentParser(
         prog="orchestrate",
         description="Claude-orchestrated, cost-aware, adversarial multi-model router.",
