@@ -34,15 +34,15 @@ def test_gate_flags_pii_in_client_field():
     assert any("task.client_email" in f for f in result["flags"])
 
 
-def test_gate_raises_on_cost_ceiling_breach(monkeypatch):
-    from orchestrator.gate import _session_spend_usd
-
+def test_gate_raises_on_cost_ceiling_breach(tmp_path, monkeypatch):
     cfg = load_config()
-    # Mock _session_spend_usd to return a spend that exceeds the $2.00 ceiling.
-    monkeypatch.setattr(
-        "orchestrator.gate._session_spend_usd",
-        lambda: 2.01,
+    # Write a real log entry so session spend ($2.01) already exceeds the $2.00 ceiling.
+    monkeypatch.setenv("ORCHESTRATOR_LOG_DIR", str(tmp_path))
+    log_file = tmp_path / f"{date.today().isoformat()}.jsonl"
+    log_file.write_text(
+        json.dumps({"ts": "2026-06-12T00:00:00Z", "event": "route", "cost_usd": 2.01}) + "\n",
+        encoding="utf-8",
     )
-    # Even a zero-cost call (no model/tokens in task) should now be blocked.
+    # Zero-cost call should still be blocked because current_spend > ceiling.
     with pytest.raises(CostCeilingError):
         gate("output text", {"description": "anything"}, cfg)
