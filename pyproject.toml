@@ -3,7 +3,7 @@ name = "model-orchestrator"
 version = "0.0.1"
 description = "Claude-orchestrated, cost-aware, adversarial multi-model router"
 requires-python = ">=3.10"
-dependencies = ["PyYAML>=6.0"]
+dependencies = ["PyYAML>=6.0", "anthropic>=0.50", "openai>=1.0"]
 
 [project.scripts]
 orchestrate = "orchestrator.cli:main"
