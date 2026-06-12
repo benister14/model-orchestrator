@@ -1,5 +1,6 @@
 import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -34,18 +35,24 @@ def test_gate_flags_pii_in_client_field():
     assert any("task.client_email" in f for f in result["flags"])
 
 
-def test_gate_raises_on_cost_ceiling_breach(tmp_path, monkeypatch):
+def test_gate_raises_on_cost_ceiling_breach(monkeypatch):
+    import shutil
+    import tempfile
     cfg = load_config()
-    # Write a real log entry so session spend ($2.01) already exceeds the $2.00 ceiling.
-    monkeypatch.setenv("ORCHESTRATOR_LOG_DIR", str(tmp_path))
-    log_file = tmp_path / f"{date.today().isoformat()}.jsonl"
-    log_file.write_text(
-        json.dumps({"ts": "2026-06-12T00:00:00Z", "event": "route", "cost_usd": 2.01}) + "\n",
-        encoding="utf-8",
-    )
-    # Zero-cost call should still be blocked because current_spend > ceiling.
-    with pytest.raises(CostCeilingError):
-        gate("output text", {"description": "anything"}, cfg)
+    # Use tempfile to avoid pytest tmp_path permission issues on Windows.
+    log_dir = tempfile.mkdtemp()
+    try:
+        monkeypatch.setenv("ORCHESTRATOR_LOG_DIR", log_dir)
+        log_file = Path(log_dir) / f"{date.today().isoformat()}.jsonl"
+        log_file.write_text(
+            json.dumps({"ts": "2026-06-12T00:00:00Z", "event": "route", "cost_usd": 2.01}) + "\n",
+            encoding="utf-8",
+        )
+        # Zero-cost call should still be blocked because current_spend > ceiling.
+        with pytest.raises(CostCeilingError):
+            gate("output text", {"description": "anything"}, cfg)
+    finally:
+        shutil.rmtree(log_dir, ignore_errors=True)
 
 
 from orchestrator.prefilter import prefilter
