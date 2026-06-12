@@ -86,3 +86,56 @@ def test_prefilter_compresses_long_description():
     long_desc = "word " * 200  # 1000-char description
     result = prefilter({"description": long_desc})
     assert len(result["description"]) <= 500
+
+
+import copy
+from orchestrator.router import route, LaneViolationError, RoutingError
+
+
+def test_router_default_routes_to_open_worker():
+    cfg = load_config()
+    task = {"description": "scaffold a CRUD API", "type": "code",
+            "complexity": 1, "risk": "low", "sensitive": False}
+    model_name, endpoint = route(task, cfg)
+    # Default (non-sensitive, low complexity) → worker open → deepseek-v4-flash
+    assert model_name == "deepseek-v4-flash"
+    assert endpoint is None
+
+
+def test_router_sensitive_resolves_to_trusted_lane():
+    cfg = load_config()
+    task = {"description": "process client data", "type": "batch",
+            "complexity": 1, "risk": "low", "sensitive": True}
+    model_name, endpoint = route(task, cfg)
+    trusted_providers = set(cfg["lanes"]["trusted"]["providers"])
+    provider = cfg["models"][model_name]["provider"]
+    assert provider in trusted_providers
+
+
+def test_router_raises_lane_violation_for_bad_config():
+    cfg = load_config()
+    bad_cfg = copy.deepcopy(cfg)
+    # Point the sensitive worker slot at deepseek (untrusted provider)
+    bad_cfg["roles"]["worker"]["sensitive"] = "deepseek-v4-flash"
+    task = {"description": "process client data", "type": "batch",
+            "complexity": 1, "risk": "low", "sensitive": True}
+    with pytest.raises(LaneViolationError):
+        route(task, bad_cfg)
+
+
+def test_router_high_risk_routes_to_orchestrator():
+    cfg = load_config()
+    task = {"description": "design auth system", "type": "architecture",
+            "complexity": 4, "risk": "high", "sensitive": False}
+    model_name, endpoint = route(task, cfg)
+    assert model_name == "claude-sonnet-4-6"
+
+
+def test_router_long_context_routes_to_long_context_lane():
+    cfg = load_config()
+    task = {"description": "summarize document", "type": "code",
+            "complexity": 2, "risk": "low", "sensitive": False,
+            "context_tokens": 150_000}
+    model_name, endpoint = route(task, cfg)
+    model_roles = cfg["models"][model_name]["roles"]
+    assert any("long_context" in r for r in model_roles)
