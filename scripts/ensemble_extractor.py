@@ -297,14 +297,41 @@ _UNIT_ALIASES: dict[str, str] = {
     "°": "deg", # ° → deg
     "Ω": "ohm", # Ω → ohm
     "λ": "lambda",  # λ → lambda
+    # Middle dot and bullet variants used in compound units (ohm·cm, m·s⁻¹)
+    "·": "-",   # middle dot → hyphen
+    "•": "-",   # bullet → hyphen
+    # Superscript minus and digits (cm⁻¹, m⁻²)
+    "⁻": "-",   # superscript minus → hyphen
+    "⁰": "0", "¹": "1", "⁴": "4", "⁵": "5",
+    "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+    # Subscript digits (CO₂, H₂O)
+    "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4",
+    "₅": "5", "₆": "6", "₇": "7", "₈": "8", "₉": "9",
+    # Degree/angle abbreviation variants
+    "deg": "deg",   # already canonical — handled by lower() pass
+    # Slash variants for "per"
+    "∕": "/",   # division slash → solidus
 }
+
+# Suffixes/qualifiers stripped during unit comparison (not part of the quantity).
+# These appear in stored units but don't change the physical quantity.
+_UNIT_STRIP_SUFFIXES: tuple[str, ...] = (
+    " cep",     # circular error probable qualifier
+    " rms",     # root mean square qualifier
+    " (rms)",
+    " per link",  # "gbyte/s per link" → "gbyte/s"
+)
 
 
 def _norm_unit(s: str) -> str:
-    """Normalize unicode variants in unit strings to ASCII-safe equivalents."""
+    """Normalize unicode variants and qualifiers in unit strings to ASCII-safe equivalents."""
     for ch, repl in _UNIT_ALIASES.items():
         s = s.replace(ch, repl)
-    return s.strip().lower()
+    s = s.strip().lower()
+    for suffix in _UNIT_STRIP_SUFFIXES:
+        if s.endswith(suffix):
+            s = s[: -len(suffix)].strip()
+    return s
 
 
 def _norm_val(v: Any) -> str:
