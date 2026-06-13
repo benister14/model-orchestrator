@@ -53,6 +53,16 @@ ENSEMBLE_RUNS: list[tuple[str, str]] = [
     ("anthropic",  "claude-haiku-4-5-20251001"),
 ]
 
+# For nodes with many stored thresholds mistral-small truncates its JSON output.
+# Switch to haiku×3 when stored threshold count exceeds this.
+# Empirically: mistral-small truncates at ~13k chars output, hitting nodes with >=20 thresholds.
+_LARGE_NODE_THRESHOLD = 20
+_LARGE_NODE_RUNS: list[tuple[str, str]] = [
+    ("anthropic", "claude-haiku-4-5-20251001"),
+    ("anthropic", "claude-haiku-4-5-20251001"),
+    ("anthropic", "claude-haiku-4-5-20251001"),
+]
+
 # Haiku supports 8192 output tokens; mistral-small caps at 4096.
 _MAX_TOKENS_BY_PROVIDER: dict[str, int] = {
     "mistral":   4096,
@@ -314,6 +324,7 @@ def compute_agreement(
     code: str,
     runs: list[dict],
     stored_cj: dict,
+    node_runs: list[tuple[str, str]] | None = None,
 ) -> tuple[float, list[dict]]:
     """
     Per-threshold-parameter agreement across K runs.
@@ -346,9 +357,10 @@ def compute_agreement(
 
     for param in sorted(all_params):
         # Collect comparable tuple (op, val, unit) from each run
+        effective_runs = node_runs if node_runs is not None else ENSEMBLE_RUNS
         run_tuples: list[dict | None] = []
         run_labels: list[str] = []
-        for i, (provider, model) in enumerate(ENSEMBLE_RUNS):
+        for i, (provider, model) in enumerate(effective_runs):
             run = runs[i]
             if run.get("_error"):
                 run_tuples.append(None)
@@ -611,11 +623,14 @@ def main(argv: list[str] | None = None) -> int:
 
     for idx, node in enumerate(nodes, 1):
         code = node["code"]
-        print(f"[{idx}/{len(nodes)}] {code}", flush=True)
+        stored_tc = len((node.get("criteria_json") or {}).get("thresholds") or [])
+        node_runs = _LARGE_NODE_RUNS if stored_tc > _LARGE_NODE_THRESHOLD else ENSEMBLE_RUNS
+        ensemble_label = f"haiku×{len(node_runs)}" if node_runs is _LARGE_NODE_RUNS else f"mistral×2+haiku×1"
+        print(f"[{idx}/{len(nodes)}] {code}  ({stored_tc} stored thresholds → {ensemble_label})", flush=True)
         runs: list[dict] = []
         run_errors: list[str] = []
 
-        for run_i, (provider, model) in enumerate(ENSEMBLE_RUNS):
+        for run_i, (provider, model) in enumerate(node_runs):
             print(f"  run {run_i+1}  {provider}/{model} ... ", end="", flush=True)
             result = _extract_once(node, adapters[provider], model, provider)
             total_calls += 1
@@ -631,7 +646,7 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(0.4)
 
         stored_cj  = node.get("criteria_json") or {}
-        node_score, field_rows = compute_agreement(code, runs, stored_cj)
+        node_score, field_rows = compute_agreement(code, runs, stored_cj, node_runs)
 
         div = sum(1 for f in field_rows if f["verdict"] == "REVIEW")
         sm  = sum(1 for f in field_rows if f["stored_mismatch"])
