@@ -11,9 +11,12 @@ class AnthropicAdapter(Adapter):
 
     def complete(self, prompt: str, model: str, **kwargs) -> str:
         max_tokens: int = kwargs.get("max_tokens", 1024)
-        msg = self._client.messages.create(
+        create_kwargs: dict = dict(
             model=model,
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
+        if kwargs.get("system"):
+            create_kwargs["system"] = kwargs["system"]
+        msg = self._client.messages.create(**create_kwargs)
         return msg.content[0].text

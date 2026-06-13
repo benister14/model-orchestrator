@@ -16,9 +16,13 @@ class DeepSeekAdapter(Adapter):
 
     def complete(self, prompt: str, model: str, **kwargs) -> str:
         max_tokens: int = kwargs.get("max_tokens", 1024)
+        messages = []
+        if kwargs.get("system"):
+            messages.append({"role": "system", "content": kwargs["system"]})
+        messages.append({"role": "user", "content": prompt})
         response = self._client.chat.completions.create(
             model=model,
             max_tokens=max_tokens,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
         )
         return response.choices[0].message.content
