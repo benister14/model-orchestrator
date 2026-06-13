@@ -331,7 +331,16 @@ def compute_agreement(
             if p:
                 all_params.add(p)
 
-    stored_thresholds = {_param_key(t): t for t in (stored_cj.get("thresholds") or [])}
+    # Group stored thresholds by param key — preserves ALL duplicates (e.g. 1C010
+    # has two dma_tg_k entries for different sub-items). A plain dict comprehension
+    # would silently keep only the last, causing false stored-vs-ensemble mismatches.
+    from collections import defaultdict
+    stored_by_param: dict[str, list[dict]] = defaultdict(list)
+    for t in (stored_cj.get("thresholds") or []):
+        k = _param_key(t)
+        if k:
+            stored_by_param[k].append(t)
+
     field_rows: list[dict] = []
     stable_count = 0
 
@@ -372,22 +381,36 @@ def compute_agreement(
         if all_agree:
             stable_count += 1
 
-        # Compare ensemble consensus against stored value
-        stored_match = stored_thresholds.get(param)
+        # Compare ensemble runs against stored value(s).
+        # Rules:
+        # - A param may have multiple stored entries (different applies_when contexts).
+        # - stored_mismatch = True ONLY when EVERY valid run disagrees with EVERY stored
+        #   candidate for this param.  A single run confirming any stored candidate is
+        #   not a mismatch — cheap models often hallucinate == for "or more" phrasing,
+        #   so majority-vote consensus is not reliable enough to override stored.
+        stored_candidates = stored_by_param.get(param, [])
         stored_mismatch = False
         stored_label = "not in stored"
-        if stored_match:
-            stored_tup = {
-                "op":   stored_match.get("operator", ""),
-                "val":  _norm_val(stored_match.get("value")),
-                "unit": _norm_unit(stored_match.get("unit") or ""),
-            }
-            stored_label = f"op={stored_tup['op']} val={stored_tup['val']} unit={stored_tup['unit'] or '-'}"
+        if stored_candidates:
+            stored_tups = [
+                {
+                    "op":   c.get("operator", ""),
+                    "val":  _norm_val(c.get("value")),
+                    "unit": _norm_unit(c.get("unit") or ""),
+                }
+                for c in stored_candidates
+            ]
+            s0 = stored_tups[0]
+            stored_label = f"op={s0['op']} val={s0['val']} unit={s0['unit'] or '-'}"
+            if len(stored_tups) > 1:
+                stored_label += f" (+{len(stored_tups)-1} dup)"
             if non_null:
-                from collections import Counter
-                counts = Counter(json.dumps(t, sort_keys=True) for t in non_null)
-                consensus = json.loads(counts.most_common(1)[0][0])
-                stored_mismatch = (consensus != stored_tup)
+                any_confirms = any(
+                    run_tup == stored_tup
+                    for run_tup in non_null
+                    for stored_tup in stored_tups
+                )
+                stored_mismatch = not any_confirms
 
         field_rows.append({
             "node_code":       code,
@@ -530,6 +553,10 @@ def build_report(
 # Main
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Ensemble criteria extraction harness")
     parser.add_argument("--nodes", default=None,
                         help="Comma-separated node codes to target (overrides default priority list)")
