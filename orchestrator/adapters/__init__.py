@@ -3,6 +3,7 @@ from __future__ import annotations
 from .base import Adapter
 from .anthropic import AnthropicAdapter
 from .deepseek import DeepSeekAdapter
+from .mistral import MistralAdapter
 
 
 def get_adapter(provider: str) -> Adapter:
@@ -10,7 +11,9 @@ def get_adapter(provider: str) -> Adapter:
         return AnthropicAdapter()
     if provider == "deepseek":
         return DeepSeekAdapter()
+    if provider == "mistral":
+        return MistralAdapter()
     raise ValueError(
         f"no adapter registered for provider '{provider}' "
-        f"(available: anthropic, deepseek)"
+        f"(available: anthropic, deepseek, mistral)"
     )

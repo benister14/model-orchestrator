@@ -141,6 +141,17 @@ def test_router_long_context_routes_to_long_context_lane():
     assert any("long_context" in r for r in model_roles)
 
 
+def test_router_sensitive_low_complexity_routes_to_mistral():
+    cfg = load_config()
+    # Sensitive batch task, complexity=1 — should go to worker.sensitive (mistral-small),
+    # NOT to the orchestrator (claude-sonnet-4-6). The trusted lane handles safety;
+    # orchestrator is reserved for architecture and high-complexity tasks.
+    task = {"description": "normalise client contact records", "type": "batch",
+            "complexity": 1, "risk": "high", "sensitive": True}
+    model_name, endpoint = route(task, cfg)
+    assert model_name == "mistral-small"
+
+
 def test_router_sensitive_architecture_stays_in_trusted_lane():
     cfg = load_config()
     task = {"description": "design secure auth system", "type": "architecture",

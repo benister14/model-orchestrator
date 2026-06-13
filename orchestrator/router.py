@@ -30,7 +30,12 @@ def route(task: dict, cfg: dict) -> tuple[str, str | None]:
     requires_cot = task.get("requires_cot", False)
 
     # ---- Role selection (rules in priority order) ----
-    if task_type == "architecture" or risk == "high":
+    # Architecture always needs the orchestrator model.
+    # High risk alone does NOT force orchestrator — that's what the trusted lane
+    # is for. Only escalate on high risk when the task is also complex (>=3),
+    # e.g. a security design. Simple sensitive tasks (batch, tagging) go to the
+    # trusted worker (mistral-small) which is far cheaper.
+    if task_type == "architecture" or (risk == "high" and complexity >= 3):
         role, variant = "orchestrator", "default"
     elif context_tokens > 100_000:
         role = "long_context"
