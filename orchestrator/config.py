@@ -61,6 +61,17 @@ def _iter_role_models(spec):
                     yield f"{k}.{k2}", v2
 
 
+def api_model_of(name: str, cfg: dict) -> str:
+    """The provider's API model id for a roster name.
+
+    The roster key is a stable DISPLAY name; the provider's actual API model id
+    can drift (Mistral/OpenAI ship `-latest` aliases). An optional `api_model`
+    field on a model decouples the two so a stale id is a one-line config change,
+    not a hard 400 on every call routed to it.
+    """
+    return cfg.get("models", {}).get(name, {}).get("api_model", name)
+
+
 def effective_models(cfg: dict, today: date | None = None) -> dict:
     """Active roster: drops retired models and anything at/past its eol_date."""
     today = today or date.today()

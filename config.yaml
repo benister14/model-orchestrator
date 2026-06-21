@@ -51,9 +51,9 @@ models:
     status: active
     eol_date: null
     roles: [prefilter, router]
-  gemini-3-flash:
+  gemini-3.5-flash:
     provider: google
-    price: { in: 0.50, out: 3.00 }
+    price: { in: 0.50, out: 3.00 }   # TODO confirm 3.5-flash rate; carried over from 3-flash
     context: 1000000
     status: active
     eol_date: null
@@ -74,6 +74,7 @@ models:
     roles: [reasoner, red_team_routine]
   gpt-5.5-codex:
     provider: openai
+    api_model: gpt-5.5     # 'gpt-5.5-codex' 404s (no such id); flagship gpt-5.5 is accessible + a stronger reasoner for non-code review
     price: { in: 1.75, out: 14.00 }   # confirm 5.5-codex rate; 5.2/5.3-codex = 1.75/14
     context: 400000
     status: active
@@ -81,6 +82,7 @@ models:
     roles: [red_team_code]
   mistral-small:
     provider: mistral
+    api_model: mistral-small-latest   # provider API id (display key stays stable)
     price: { in: 0.15, out: 0.60 }    # trackers vary 0.10-0.20 in / 0.30-0.60 out
     context: 128000
     status: active
@@ -88,6 +90,7 @@ models:
     roles: [worker_sensitive, prefilter_sensitive]
   mistral-magistral-medium:
     provider: mistral
+    api_model: magistral-medium-latest   # the API rejected 'mistral-magistral-medium' (400 invalid_model)
     price: { in: 2.00, out: 5.00 }
     context: 128000
     status: active
@@ -108,14 +111,14 @@ roles:
   orchestrator:   { default: claude-sonnet-4-6, hard: claude-opus-4-8 }
   prefilter:      { open: gemini-2.5-flash-lite, sensitive: mistral-small }
   worker:         { open: deepseek-v4-flash,     sensitive: mistral-small }
-  long_context:   { open: gemini-3-flash,        sensitive: claude-sonnet-4-6 }
+  long_context:   { open: gemini-3.5-flash,      sensitive: claude-sonnet-4-6 }
   reasoner:       { open: deepseek-v4-pro,        sensitive: mistral-magistral-medium }
   red_team:
     routine:             deepseek-v4-pro
     code:                gpt-5.5-codex
     code_sensitive:      gpt-5.5-codex     # via OpenAI EU residency endpoint
     reasoning_sensitive: mistral-magistral-medium
-  judge:          { default: gemini-3-flash, meta: claude-opus-4-8 }
+  judge:          { default: gemini-3.5-flash, meta: claude-opus-4-8 }
 
 # ---- Thresholds (defaults; tune from logs after the P1 week) ----------
 thresholds:

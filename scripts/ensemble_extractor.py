@@ -53,6 +53,16 @@ ENSEMBLE_RUNS: list[tuple[str, str]] = [
     ("anthropic",  "claude-haiku-4-5-20251001"),
 ]
 
+# For nodes with many stored thresholds mistral-small truncates its JSON output.
+# Switch to haiku×3 when stored threshold count exceeds this.
+# Empirically: mistral-small truncates at ~13k chars output, hitting nodes with >=20 thresholds.
+_LARGE_NODE_THRESHOLD = 20
+_LARGE_NODE_RUNS: list[tuple[str, str]] = [
+    ("anthropic", "claude-haiku-4-5-20251001"),
+    ("anthropic", "claude-haiku-4-5-20251001"),
+    ("anthropic", "claude-haiku-4-5-20251001"),
+]
+
 # Haiku supports 8192 output tokens; mistral-small caps at 4096.
 _MAX_TOKENS_BY_PROVIDER: dict[str, int] = {
     "mistral":   4096,
@@ -287,14 +297,41 @@ _UNIT_ALIASES: dict[str, str] = {
     "°": "deg", # ° → deg
     "Ω": "ohm", # Ω → ohm
     "λ": "lambda",  # λ → lambda
+    # Middle dot and bullet variants used in compound units (ohm·cm, m·s⁻¹)
+    "·": "-",   # middle dot → hyphen
+    "•": "-",   # bullet → hyphen
+    # Superscript minus and digits (cm⁻¹, m⁻²)
+    "⁻": "-",   # superscript minus → hyphen
+    "⁰": "0", "¹": "1", "⁴": "4", "⁵": "5",
+    "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+    # Subscript digits (CO₂, H₂O)
+    "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4",
+    "₅": "5", "₆": "6", "₇": "7", "₈": "8", "₉": "9",
+    # Degree/angle abbreviation variants
+    "deg": "deg",   # already canonical — handled by lower() pass
+    # Slash variants for "per"
+    "∕": "/",   # division slash → solidus
 }
+
+# Suffixes/qualifiers stripped during unit comparison (not part of the quantity).
+# These appear in stored units but don't change the physical quantity.
+_UNIT_STRIP_SUFFIXES: tuple[str, ...] = (
+    " cep",     # circular error probable qualifier
+    " rms",     # root mean square qualifier
+    " (rms)",
+    " per link",  # "gbyte/s per link" → "gbyte/s"
+)
 
 
 def _norm_unit(s: str) -> str:
-    """Normalize unicode variants in unit strings to ASCII-safe equivalents."""
+    """Normalize unicode variants and qualifiers in unit strings to ASCII-safe equivalents."""
     for ch, repl in _UNIT_ALIASES.items():
         s = s.replace(ch, repl)
-    return s.strip().lower()
+    s = s.strip().lower()
+    for suffix in _UNIT_STRIP_SUFFIXES:
+        if s.endswith(suffix):
+            s = s[: -len(suffix)].strip()
+    return s
 
 
 def _norm_val(v: Any) -> str:
@@ -314,6 +351,7 @@ def compute_agreement(
     code: str,
     runs: list[dict],
     stored_cj: dict,
+    node_runs: list[tuple[str, str]] | None = None,
 ) -> tuple[float, list[dict]]:
     """
     Per-threshold-parameter agreement across K runs.
@@ -331,15 +369,25 @@ def compute_agreement(
             if p:
                 all_params.add(p)
 
-    stored_thresholds = {_param_key(t): t for t in (stored_cj.get("thresholds") or [])}
+    # Group stored thresholds by param key — preserves ALL duplicates (e.g. 1C010
+    # has two dma_tg_k entries for different sub-items). A plain dict comprehension
+    # would silently keep only the last, causing false stored-vs-ensemble mismatches.
+    from collections import defaultdict
+    stored_by_param: dict[str, list[dict]] = defaultdict(list)
+    for t in (stored_cj.get("thresholds") or []):
+        k = _param_key(t)
+        if k:
+            stored_by_param[k].append(t)
+
     field_rows: list[dict] = []
     stable_count = 0
 
     for param in sorted(all_params):
         # Collect comparable tuple (op, val, unit) from each run
+        effective_runs = node_runs if node_runs is not None else ENSEMBLE_RUNS
         run_tuples: list[dict | None] = []
         run_labels: list[str] = []
-        for i, (provider, model) in enumerate(ENSEMBLE_RUNS):
+        for i, (provider, model) in enumerate(effective_runs):
             run = runs[i]
             if run.get("_error"):
                 run_tuples.append(None)
@@ -372,22 +420,36 @@ def compute_agreement(
         if all_agree:
             stable_count += 1
 
-        # Compare ensemble consensus against stored value
-        stored_match = stored_thresholds.get(param)
+        # Compare ensemble runs against stored value(s).
+        # Rules:
+        # - A param may have multiple stored entries (different applies_when contexts).
+        # - stored_mismatch = True ONLY when EVERY valid run disagrees with EVERY stored
+        #   candidate for this param.  A single run confirming any stored candidate is
+        #   not a mismatch — cheap models often hallucinate == for "or more" phrasing,
+        #   so majority-vote consensus is not reliable enough to override stored.
+        stored_candidates = stored_by_param.get(param, [])
         stored_mismatch = False
         stored_label = "not in stored"
-        if stored_match:
-            stored_tup = {
-                "op":   stored_match.get("operator", ""),
-                "val":  _norm_val(stored_match.get("value")),
-                "unit": _norm_unit(stored_match.get("unit") or ""),
-            }
-            stored_label = f"op={stored_tup['op']} val={stored_tup['val']} unit={stored_tup['unit'] or '-'}"
+        if stored_candidates:
+            stored_tups = [
+                {
+                    "op":   c.get("operator", ""),
+                    "val":  _norm_val(c.get("value")),
+                    "unit": _norm_unit(c.get("unit") or ""),
+                }
+                for c in stored_candidates
+            ]
+            s0 = stored_tups[0]
+            stored_label = f"op={s0['op']} val={s0['val']} unit={s0['unit'] or '-'}"
+            if len(stored_tups) > 1:
+                stored_label += f" (+{len(stored_tups)-1} dup)"
             if non_null:
-                from collections import Counter
-                counts = Counter(json.dumps(t, sort_keys=True) for t in non_null)
-                consensus = json.loads(counts.most_common(1)[0][0])
-                stored_mismatch = (consensus != stored_tup)
+                any_confirms = any(
+                    run_tup == stored_tup
+                    for run_tup in non_null
+                    for stored_tup in stored_tups
+                )
+                stored_mismatch = not any_confirms
 
         field_rows.append({
             "node_code":       code,
@@ -530,6 +592,10 @@ def build_report(
 # Main
 # ---------------------------------------------------------------------------
 def main(argv: list[str] | None = None) -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Ensemble criteria extraction harness")
     parser.add_argument("--nodes", default=None,
                         help="Comma-separated node codes to target (overrides default priority list)")
@@ -584,11 +650,14 @@ def main(argv: list[str] | None = None) -> int:
 
     for idx, node in enumerate(nodes, 1):
         code = node["code"]
-        print(f"[{idx}/{len(nodes)}] {code}", flush=True)
+        stored_tc = len((node.get("criteria_json") or {}).get("thresholds") or [])
+        node_runs = _LARGE_NODE_RUNS if stored_tc > _LARGE_NODE_THRESHOLD else ENSEMBLE_RUNS
+        ensemble_label = f"haiku×{len(node_runs)}" if node_runs is _LARGE_NODE_RUNS else f"mistral×2+haiku×1"
+        print(f"[{idx}/{len(nodes)}] {code}  ({stored_tc} stored thresholds → {ensemble_label})", flush=True)
         runs: list[dict] = []
         run_errors: list[str] = []
 
-        for run_i, (provider, model) in enumerate(ENSEMBLE_RUNS):
+        for run_i, (provider, model) in enumerate(node_runs):
             print(f"  run {run_i+1}  {provider}/{model} ... ", end="", flush=True)
             result = _extract_once(node, adapters[provider], model, provider)
             total_calls += 1
@@ -604,7 +673,7 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(0.4)
 
         stored_cj  = node.get("criteria_json") or {}
-        node_score, field_rows = compute_agreement(code, runs, stored_cj)
+        node_score, field_rows = compute_agreement(code, runs, stored_cj, node_runs)
 
         div = sum(1 for f in field_rows if f["verdict"] == "REVIEW")
         sm  = sum(1 for f in field_rows if f["stored_mismatch"])

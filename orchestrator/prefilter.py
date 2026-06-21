@@ -37,7 +37,11 @@ _PII_SIGNAL = re.compile(
 def prefilter(task: dict, sensitive: bool = False) -> dict:
     """
     Return a new task dict with added keys: type, complexity, risk, sensitive.
-    The description is truncated to 500 chars to reduce downstream tokens.
+
+    The description is passed through UNCHANGED — it is the actual task the worker
+    must answer. (A prior version truncated it to 500 chars "to reduce tokens",
+    which silently fed the worker a fragment and made every real prompt fail; the
+    tagging below already reads the full text, so truncation only ever broke the task.)
     """
     description = task.get("description", "")
     desc_lower = description.lower()
@@ -78,7 +82,7 @@ def prefilter(task: dict, sensitive: bool = False) -> dict:
 
     return {
         **task,
-        "description": description[:500],
+        "description": description,
         "type": task_type,
         "complexity": complexity,
         "risk": risk,
