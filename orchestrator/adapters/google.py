@@ -4,10 +4,12 @@ from openai import OpenAI
 
 from .base import Adapter, message_text
 
-_BASE_URL = "https://api.mistral.ai/v1"
+# Gemini exposes an OpenAI-compatible endpoint, so we reuse the openai SDK
+# rather than add a google-genai dependency (see code conventions in CLAUDE.md).
+_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 
 
-class MistralAdapter(Adapter):
+class GoogleAdapter(Adapter):
     def __init__(self) -> None:
         self._client: OpenAI | None = None
 
@@ -15,7 +17,7 @@ class MistralAdapter(Adapter):
         # Lazy: constructing an adapter must not require credentials, only calling it.
         if self._client is None:
             self._client = OpenAI(
-                api_key=os.environ.get("MISTRAL_API_KEY"),
+                api_key=os.environ.get("GEMINI_API_KEY"),
                 base_url=_BASE_URL,
             )
         return self._client

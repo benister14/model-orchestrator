@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from . import __version__
-from .config import ConfigError, effective_models, load_config
+from .config import ConfigError, api_model_of, effective_models, load_config
 from .runlog import LOG_DIR, log_event
 from .secrets import key_status
 
@@ -58,11 +58,18 @@ def cmd_route(args) -> int:
         print(f"config error: {e}", file=sys.stderr)
         return 1
 
-    task: dict = {"description": args.task}
+    # Big multi-line prompts get mangled by shell arg-tokenisation (embedded quotes,
+    # newlines). Reading the task from stdin when it is "-" sidesteps that entirely:
+    #   echo "..." | orchestrate route - --judge   (or  $task | orchestrate route -)
+    task_text = sys.stdin.read() if args.task == "-" else args.task
+
+    task: dict = {"description": task_text}
     if args.sensitive:
         task["sensitive"] = True
     if args.context_tokens:
         task["context_tokens"] = args.context_tokens
+    if args.requires_cot:
+        task["requires_cot"] = True
 
     tagged = prefilter(task, sensitive=bool(args.sensitive))
 
@@ -71,6 +78,22 @@ def cmd_route(args) -> int:
     except (LaneViolationError, RoutingError) as e:
         print(f"routing error: {e}", file=sys.stderr)
         return 1
+
+    # --worker pins a specific roster model (e.g. to get a cross-PROVIDER second
+    # opinion the router wouldn't pick). Still honours the trusted-lane invariant
+    # for sensitive tasks; recomputes the EU endpoint for a sensitive OpenAI worker.
+    if args.worker:
+        if args.worker not in cfg.get("models", {}):
+            print(f"error: --worker '{args.worker}' is not in the roster", file=sys.stderr)
+            return 1
+        model_name = args.worker
+        wprov = cfg["models"][model_name].get("provider")
+        if args.sensitive and wprov not in set(cfg["lanes"]["trusted"]["providers"]):
+            print(f"error: --worker '{model_name}' (provider '{wprov}') is outside the "
+                  f"trusted lane; drop --sensitive or choose a trusted worker", file=sys.stderr)
+            return 1
+        endpoint = (cfg.get("providers", {}).get("openai", {}).get("eu_endpoint")
+                    if (args.sensitive and wprov == "openai") else None)
 
     model_cfg = cfg.get("models", {}).get(model_name, {})
     price = model_cfg.get("price", {})
@@ -116,7 +139,11 @@ def cmd_route(args) -> int:
 
     print("\ncalling API ...")
     try:
-        output = adapter.complete(prompt=tagged["description"], model=model_name)
+        # endpoint is non-None only for sensitive OpenAI calls (EU data residency);
+        # adapters that ignore it (deepseek/mistral/google/anthropic) accept **kwargs.
+        output = adapter.complete(prompt=tagged["description"],
+                                  model=api_model_of(model_name, cfg),
+                                  endpoint=endpoint, max_tokens=args.max_tokens)
     except Exception as e:
         print(f"API error: {e}", file=sys.stderr)
         return 1
@@ -148,7 +175,53 @@ def cmd_route(args) -> int:
     if result["flags"]:
         print(f"flags:  {', '.join(result['flags'])}")
     print(f"cost:   ${result['cost_usd']:.6f}")
+
+    # ---- Judge (P2; opt-in via --judge) ----
+    if args.judge:
+        from .judge import judge as run_judge, JudgeProviderError, JudgeResponseError
+        print("\njudging ...")
+        try:
+            verdict = run_judge(output, tagged, cfg)
+        except (JudgeProviderError, JudgeResponseError) as e:
+            print(f"judge error: {e}", file=sys.stderr)
+            return 1
+        except Exception as e:
+            print(f"judge API error: {e}", file=sys.stderr)
+            return 1
+
+        log_event(
+            "judge",
+            worker_model=model_name,
+            task_type=tagged.get("type"),
+            judge_model=verdict["judge_model"],
+            score=verdict["score"],
+            escalated=verdict["escalated"],
+            meta_model=(verdict["meta"] or {}).get("model"),
+            final_score=verdict["final_score"],
+            passed=verdict["passed"],
+        )
+
+        print(f"\n--- judge ---")
+        print(f"judge:      {verdict['judge_model']}")
+        print(f"score:      {verdict['score']:.2f}")
+        print(f"reasoning:  {verdict['reasoning']}")
+        if verdict["escalated"]:
+            m = verdict["meta"]
+            print(f"escalated:  yes -> {m['model']} (score {m['score']:.2f})")
+            print(f"meta says:  {m['reasoning']}")
+        else:
+            print("escalated:  no")
+        print(f"final:      {verdict['final_score']:.2f}  passed={verdict['passed']}")
+        return 0 if (result["passed"] and verdict["passed"]) else 1
+
     return 0 if result["passed"] else 1
+
+
+def cmd_report(args) -> int:
+    from .report import load_events, build_report, render
+    events = load_events(args.days)
+    print(render(build_report(events), args.days))
+    return 0
 
 
 def _stub(name: str, phase: str):
@@ -165,6 +238,10 @@ def main(argv=None) -> int:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    # stdin too: piped prompts (`... | orchestrate route -`) with non-ASCII bytes
+    # otherwise decode to lone surrogates that crash the adapter's UTF-8 encode.
+    if hasattr(sys.stdin, "reconfigure"):
+        sys.stdin.reconfigure(encoding="utf-8", errors="replace")
 
     p = argparse.ArgumentParser(
         prog="orchestrate",
@@ -183,10 +260,22 @@ def main(argv=None) -> int:
                    help="show routing decision without making an API call")
     r.add_argument("--context-tokens", type=int, default=0, dest="context_tokens",
                    help="token count hint for long-context routing")
+    r.add_argument("--requires-cot", action="store_true", dest="requires_cot",
+                   help="force the reasoning lane (chain-of-thought reasoner)")
+    r.add_argument("--max-tokens", type=int, default=2048, dest="max_tokens",
+                   help="max output tokens for the worker call (default 2048; raise for long analyses)")
+    r.add_argument("--worker", default=None,
+                   help="pin a specific roster model as the worker (e.g. for a cross-provider second opinion)")
+    r.add_argument("--judge", action="store_true",
+                   help="[P2] cross-provider judge scores the output; escalates if low")
     r.set_defaults(func=cmd_route)
 
-    for name, phase in [("gate", "P1"), ("judge", "P2"),
-                        ("debate", "P5"), ("report", "P4")]:
+    rep = sub.add_parser("report", help="[P4] summarize cost + judge stats from the logs")
+    rep.add_argument("--days", type=int, default=7,
+                     help="how many days back to include (default 7)")
+    rep.set_defaults(func=cmd_report)
+
+    for name, phase in [("gate", "P1"), ("debate", "P5")]:
         sp = sub.add_parser(name, help=f"[{phase}] stub")
         sp.set_defaults(func=_stub(name, phase))
 

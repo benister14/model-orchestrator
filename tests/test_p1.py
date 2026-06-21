@@ -82,10 +82,13 @@ def test_prefilter_sets_sensitive_flag_on_pii_signal():
     assert result["sensitive"] is True
 
 
-def test_prefilter_compresses_long_description():
+def test_prefilter_passes_full_description_through():
+    # The worker must receive the WHOLE task. A prior 500-char truncation silently
+    # fed the worker a fragment and made every real prompt fail.
     long_desc = "word " * 200  # 1000-char description
     result = prefilter({"description": long_desc})
-    assert len(result["description"]) <= 500
+    assert result["description"] == long_desc          # passed through unchanged
+    assert result["complexity"] == 3                   # tagging still works on the full text
 
 
 import copy
