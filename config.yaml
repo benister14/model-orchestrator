@@ -88,11 +88,27 @@ models:
     roles: [reasoner, red_team_routine]
   gpt-5.6-terra:
     provider: openai
-    price: { in: 2.00, out: 12.00 }  # +10% on the EU residency endpoint (post-2026-03-05 model)
+    price: { in: 2.00, out: 12.00 }
     context: 272000                  # conservative: gpt-5.5 documents 272K; terra's limit unpublished
     status: active
     eol_date: null
     roles: [red_team_code]
+  # --- OpenAI top tier: open lane only, reachable via `--worker`. No role
+  # --- assignment, so adding these changes no automatic routing.
+  gpt-5.6-sol:
+    provider: openai
+    price: { in: 4.00, out: 20.00 }  # per developers.openai.com; one tracker says 5.00/30.00 — re-confirm before bulk use
+    context: 272000                  # unpublished; conservative carry-over
+    status: active
+    eol_date: null
+    roles: []
+  gpt-6-astra:
+    provider: openai
+    price: { in: 10.00, out: 50.00 } # long-context tier bills 20.00/75.00
+    context: 272000                  # unpublished; conservative carry-over
+    status: active
+    eol_date: null
+    roles: []
   mistral-small:
     provider: mistral
     api_model: mistral-small-latest   # provider API id (display key stays stable) = Mistral Small 4
