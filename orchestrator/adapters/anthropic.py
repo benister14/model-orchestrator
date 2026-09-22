@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import anthropic as _sdk
-from .base import Adapter
+from .base import Adapter, content_blocks_text
 
 
 class AnthropicAdapter(Adapter):
@@ -25,4 +25,4 @@ class AnthropicAdapter(Adapter):
         if kwargs.get("system"):
             create_kwargs["system"] = kwargs["system"]
         msg = self._client_().messages.create(**create_kwargs)
-        return msg.content[0].text
+        return content_blocks_text(msg)

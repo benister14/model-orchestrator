@@ -36,7 +36,7 @@ def test_long_context_open_routes_to_gemini():
             "complexity": 2, "risk": "low", "sensitive": False,
             "context_tokens": 150_000}
     model_name, endpoint = route(task, cfg)
-    assert model_name == "gemini-3.5-flash"
+    assert model_name == "gemini-3.8-flash"
     assert "long_context_open" in cfg["models"][model_name]["roles"]
     assert endpoint is None
 
@@ -47,7 +47,7 @@ def test_long_context_sensitive_stays_in_trusted_lane():
             "complexity": 2, "risk": "high", "sensitive": True,
             "context_tokens": 150_000}
     model_name, endpoint = route(task, cfg)
-    assert model_name == "claude-sonnet-4-6"
+    assert model_name == "claude-sonnet-5"
     trusted = set(cfg["lanes"]["trusted"]["providers"])
     assert cfg["models"][model_name]["provider"] in trusted
 
@@ -64,13 +64,13 @@ def test_reasoner_open_routes_to_deepseek_pro():
     assert endpoint is None
 
 
-def test_reasoner_sensitive_routes_to_magistral():
+def test_reasoner_sensitive_routes_to_mistral_medium():
     cfg = load_config()
     task = {"description": "reason over client data", "type": "reasoning",
             "complexity": 2, "risk": "high", "sensitive": True,
             "requires_cot": True}
     model_name, endpoint = route(task, cfg)
-    assert model_name == "mistral-magistral-medium"
+    assert model_name == "mistral-medium-3-5"
     trusted = set(cfg["lanes"]["trusted"]["providers"])
     assert cfg["models"][model_name]["provider"] in trusted
 
@@ -82,12 +82,12 @@ def test_router_returns_eu_endpoint_for_sensitive_openai():
     bad = copy.deepcopy(cfg)
     # Point the sensitive reasoner at an OpenAI model (openai IS in the trusted
     # lane, so this is lane-valid). A sensitive route to it must carry the EU endpoint.
-    bad["roles"]["reasoner"]["sensitive"] = "gpt-5.5-codex"
+    bad["roles"]["reasoner"]["sensitive"] = "gpt-5.6-terra"
     task = {"description": "reason over client data", "type": "reasoning",
             "complexity": 2, "risk": "high", "sensitive": True,
             "requires_cot": True}
     model_name, endpoint = route(task, bad)
-    assert model_name == "gpt-5.5-codex"
+    assert model_name == "gpt-5.6-terra"
     assert endpoint == cfg["providers"]["openai"]["eu_endpoint"]
     assert endpoint and "eu.api.openai.com" in endpoint
 
@@ -100,5 +100,5 @@ def test_dry_run_long_context_routes_via_cli(capsys):
                 "--context-tokens", "150000", "--dry-run"])
     assert ret == 0
     out = capsys.readouterr().out
-    assert "gemini-3.5-flash" in out
+    assert "gemini-3.8-flash" in out
     assert "[dry-run]" in out

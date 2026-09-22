@@ -28,7 +28,7 @@ def test_judge_passes_high_score(monkeypatch):
         judge_mod, "get_adapter",
         lambda provider: FakeAdapter('{"score": 0.95, "reasoning": "complete and correct"}'),
     )
-    task = {"description": "scaffold a CRUD API", "model": "deepseek-v4-flash"}
+    task = {"description": "scaffold a CRUD API", "model": "deepseek-flash"}
     result = judge("def create(): ...", task, cfg)
     assert result["passed"] is True
     assert result["escalated"] is False
@@ -48,7 +48,7 @@ def test_judge_escalates_low_score_to_meta(monkeypatch):
         return FakeAdapter('{"score": 0.82, "reasoning": "acceptable on review"}')
 
     monkeypatch.setattr(judge_mod, "get_adapter", fake_get_adapter)
-    task = {"description": "scaffold a CRUD API", "model": "deepseek-v4-flash"}
+    task = {"description": "scaffold a CRUD API", "model": "deepseek-flash"}
     result = judge("partial output", task, cfg)
 
     assert result["escalated"] is True
@@ -67,8 +67,8 @@ def test_judge_raises_when_provider_matches_worker(monkeypatch):
         judge_mod, "get_adapter",
         lambda provider: FakeAdapter('{"score": 0.9, "reasoning": "x"}'),
     )
-    # Worker is gemini-3.5-flash (google); primary judge is also google -> must raise.
-    task = {"description": "summarize a long doc", "model": "gemini-3.5-flash"}
+    # Worker is gemini-3.8-flash (google); primary judge is also google -> must raise.
+    task = {"description": "summarize a long doc", "model": "gemini-3.8-flash"}
     with pytest.raises(JudgeProviderError):
         judge("output", task, cfg)
 
@@ -77,7 +77,7 @@ def test_judge_handles_markdown_fenced_json(monkeypatch):
     cfg = load_config()
     fenced = '```json\n{"score": 0.88, "reasoning": "fine"}\n```'
     monkeypatch.setattr(judge_mod, "get_adapter", lambda provider: FakeAdapter(fenced))
-    task = {"description": "do a thing", "model": "deepseek-v4-flash"}
+    task = {"description": "do a thing", "model": "deepseek-flash"}
     result = judge("output", task, cfg)
     assert result["score"] == 0.88
     assert result["passed"] is True

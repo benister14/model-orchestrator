@@ -9,10 +9,10 @@ from orchestrator.report import build_report, load_events, render
 
 def _routes_and_judges():
     return [
-        {"event": "route", "task_type": "code", "model": "deepseek-v4-flash", "cost_usd": 0.0002},
-        {"event": "route", "task_type": "code", "model": "deepseek-v4-flash", "cost_usd": 0.0004},
+        {"event": "route", "task_type": "code", "model": "deepseek-flash", "cost_usd": 0.0002},
+        {"event": "route", "task_type": "code", "model": "deepseek-flash", "cost_usd": 0.0004},
         {"event": "route", "task_type": "batch", "model": "mistral-small", "cost_usd": 0.0001},
-        {"event": "route", "task_type": "architecture", "model": "claude-sonnet-4-6", "cost_usd": 0.0150},
+        {"event": "route", "task_type": "architecture", "model": "claude-sonnet-5", "cost_usd": 0.0150},
         # judges: code escalates 1/2 (50% > 30%), batch 0/1
         {"event": "judge", "task_type": "code", "passed": True, "escalated": False},
         {"event": "judge", "task_type": "code", "passed": False, "escalated": True},
@@ -44,7 +44,7 @@ def test_high_escalation_task_type_flagged():
 def test_cheapest_and_priciest():
     r = build_report(_routes_and_judges())
     assert r["cheapest"]["model"] == "mistral-small"
-    assert r["priciest"]["model"] == "claude-sonnet-4-6"
+    assert r["priciest"]["model"] == "claude-sonnet-5"
 
 
 def test_empty_report_is_safe():
@@ -85,7 +85,7 @@ def test_report_command_runs(capsys, monkeypatch):
         log_file = Path(log_dir) / f"{date.today().isoformat()}.jsonl"
         log_file.write_text(
             json.dumps({"event": "route", "task_type": "code",
-                        "model": "deepseek-v4-flash", "cost_usd": 0.0003}) + "\n",
+                        "model": "deepseek-flash", "cost_usd": 0.0003}) + "\n",
             encoding="utf-8")
         from orchestrator.cli import main
         ret = main(["report", "--days", "7"])
