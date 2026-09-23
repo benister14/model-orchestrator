@@ -75,21 +75,46 @@ def test_reasoner_sensitive_routes_to_mistral_medium():
     assert cfg["models"][model_name]["provider"] in trusted
 
 
-# ---- EU residency endpoint selection in the router ------------------------
+# ---- Residency endpoint selection in the router ---------------------------
 
-def test_router_returns_eu_endpoint_for_sensitive_openai():
-    cfg = load_config()
-    bad = copy.deepcopy(cfg)
-    # Point the sensitive reasoner at an OpenAI model (openai IS in the trusted
-    # lane, so this is lane-valid). A sensitive route to it must carry the EU endpoint.
-    bad["roles"]["reasoner"]["sensitive"] = "gpt-5.6-terra"
+def _sensitive_openai_route(cfg):
+    """Route a sensitive task to an OpenAI model and return (model, endpoint).
+
+    openai IS in the trusted lane, so pinning the sensitive reasoner to it is
+    lane-valid.
+    """
+    patched = copy.deepcopy(cfg)
+    patched["roles"]["reasoner"]["sensitive"] = "gpt-5.6-terra"
     task = {"description": "reason over client data", "type": "reasoning",
             "complexity": 2, "risk": "high", "sensitive": True,
             "requires_cot": True}
-    model_name, endpoint = route(task, bad)
+    return route(task, patched)
+
+
+def test_router_forwards_configured_residency_endpoint():
+    """The router forwards whatever providers.openai.eu_endpoint holds.
+
+    This asserts the MECHANISM, not the current policy value: residency routing
+    is a config decision that has flipped before and may flip back.
+    """
+    cfg = load_config()
+    cfg["providers"]["openai"]["eu_endpoint"] = "https://eu.api.openai.com/v1"
+    model_name, endpoint = _sensitive_openai_route(cfg)
     assert model_name == "gpt-5.6-terra"
-    assert endpoint == cfg["providers"]["openai"]["eu_endpoint"]
-    assert endpoint and "eu.api.openai.com" in endpoint
+    assert endpoint == "https://eu.api.openai.com/v1"
+
+
+def test_router_returns_no_endpoint_when_residency_unset():
+    """Owner authorisation 2026-09-23: openai.eu_endpoint is null, so sensitive
+    OpenAI traffic goes to the standard endpoint. A None endpoint makes the
+    adapter fall back to the SDK default."""
+    cfg = load_config()
+    assert cfg["providers"]["openai"]["eu_endpoint"] is None, (
+        "config changed: if residency was restored, this test should assert it"
+    )
+    model_name, endpoint = _sensitive_openai_route(cfg)
+    assert model_name == "gpt-5.6-terra"
+    assert endpoint is None
 
 
 # ---- CLI dry-run exit criterion ------------------------------------------

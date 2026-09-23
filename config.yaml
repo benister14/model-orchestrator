@@ -14,19 +14,27 @@ lanes:
   trusted:
     providers: [anthropic, mistral, google, openai]
     note: >
-      OpenAI sensitive calls must use the EU data-residency endpoint.
-      Known blocker (2026-07-09, still open): that endpoint 401s until the
-      OpenAI project has geography restrictions enabled. Until then
-      --sensitive is effectively anthropic / mistral / google only.
-      Residency endpoints also bill +10% for models released on/after
-      2026-03-05, which includes gpt-5.6-terra.
+      OWNER AUTHORISATION 2026-09-23 (Benjamin, explicit, "for the moment"):
+      OpenAI may serve trusted-lane traffic over the STANDARD endpoint
+      (api.openai.com). EU data residency is NOT available on this account and
+      cannot be self-served - verified in-console 2026-09-23: project residency
+      is fixed at "Global" and read-only, org Data controls has no residency
+      section, and the create-project dialog has no region selector. Enabling it
+      requires OpenAI sales approval.
+      This means client/personal data routed to an OpenAI model is processed in
+      the US. Lawfulness rests on the OpenAI DPA + SCCs, not on data locality.
+      Marked "for the moment" - REVISIT. To revert, restore
+      eu_endpoint: "https://eu.api.openai.com/v1"; the router picks it up with
+      no code change.
+      Anthropic, Mistral and Google are unaffected and remain the default
+      sensitive resolutions.
   open:
     providers: [anthropic, mistral, google, openai, deepseek]
 
 # ---- Providers --------------------------------------------------------
 providers:
   anthropic: { env: ANTHROPIC_API_KEY, residency: us, eu_endpoint: null }
-  openai:    { env: OPENAI_API_KEY,    residency: us, eu_endpoint: "https://eu.api.openai.com/v1" }
+  openai:    { env: OPENAI_API_KEY,    residency: us, eu_endpoint: null }   # null => standard endpoint; owner authorisation 2026-09-23, see lane note
   google:    { env: GEMINI_API_KEY,    residency: us, eu_endpoint: null }
   mistral:   { env: MISTRAL_API_KEY,   residency: eu, eu_endpoint: null }
   deepseek:  { env: DEEPSEEK_API_KEY,  residency: cn, eu_endpoint: null }
