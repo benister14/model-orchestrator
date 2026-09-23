@@ -1,7 +1,8 @@
 # Model Orchestrator — roster & routing config
-# Prices are USD per 1M tokens (input / output), verified ~June 2026.
-# Third-party trackers drift; confirm against each provider's pricing page
-# before relying on a number. The structure matters more than the digits.
+# Prices are USD per 1M tokens (input / output).
+# Verified 2026-09-22 against each provider's own pricing page + /models endpoint.
+# Third-party trackers drift; re-confirm against the provider before relying on a
+# number. Re-verify on the `adaptive.refresh_cadence_days` cadence below.
 
 version: 1
 
@@ -13,15 +14,27 @@ lanes:
   trusted:
     providers: [anthropic, mistral, google, openai]
     note: >
-      OpenAI sensitive calls must use the EU data-residency endpoint
-      (and a residency-eligible model, e.g. gpt-5.5-codex).
+      OWNER AUTHORISATION 2026-09-23 (Benjamin, explicit, "for the moment"):
+      OpenAI may serve trusted-lane traffic over the STANDARD endpoint
+      (api.openai.com). EU data residency is NOT available on this account and
+      cannot be self-served - verified in-console 2026-09-23: project residency
+      is fixed at "Global" and read-only, org Data controls has no residency
+      section, and the create-project dialog has no region selector. Enabling it
+      requires OpenAI sales approval.
+      This means client/personal data routed to an OpenAI model is processed in
+      the US. Lawfulness rests on the OpenAI DPA + SCCs, not on data locality.
+      Marked "for the moment" - REVISIT. To revert, restore
+      eu_endpoint: "https://eu.api.openai.com/v1"; the router picks it up with
+      no code change.
+      Anthropic, Mistral and Google are unaffected and remain the default
+      sensitive resolutions.
   open:
     providers: [anthropic, mistral, google, openai, deepseek]
 
 # ---- Providers --------------------------------------------------------
 providers:
   anthropic: { env: ANTHROPIC_API_KEY, residency: us, eu_endpoint: null }
-  openai:    { env: OPENAI_API_KEY,    residency: us, eu_endpoint: "https://eu.api.openai.com/v1" }
+  openai:    { env: OPENAI_API_KEY,    residency: us, eu_endpoint: null }   # null => standard endpoint; owner authorisation 2026-09-23, see lane note
   google:    { env: GEMINI_API_KEY,    residency: us, eu_endpoint: null }
   mistral:   { env: MISTRAL_API_KEY,   residency: eu, eu_endpoint: null }
   deepseek:  { env: DEEPSEEK_API_KEY,  residency: cn, eu_endpoint: null }
@@ -29,70 +42,94 @@ providers:
 # ---- Roster -----------------------------------------------------------
 # status:   trial | active | demoted | retired
 # eol_date: hard retirement date (auto-fired by the router); null if none
+#
+# 2026-09-22 refresh — superseded entries and why:
+#   claude-sonnet-4-6        -> claude-sonnet-5      (newer, and 3/15 -> 2/10)
+#   claude-opus-4-8          -> claude-opus-5        (newer, same 5/25)
+#   gemini-3.5-flash         -> gemini-3.8-flash     (real 3.5 rate was 1.50/9.00, not 0.50/3.00)
+#   deepseek-v4-flash        -> deepseek-flash       (old id DELISTED; provider serves V4.1 as `deepseek-flash`)
+#   gpt-5.5-codex (=gpt-5.5) -> gpt-5.6-terra        (real gpt-5.5 rate was 5.00/30.00, not 1.75/14.00)
+#   mistral-magistral-medium -> mistral-medium-3-5   (magistral resolves but is unpriced publicly)
+#   gemini-2.5-flash-lite    -> gemini-3.5-flash-lite (2.5 404s for this key; listed but not callable)
 models:
-  claude-sonnet-4-6:
+  claude-sonnet-5:
     provider: anthropic
-    price: { in: 3.00, out: 15.00 }
+    price: { in: 2.00, out: 10.00 }
     context: 1000000
     status: active
     eol_date: null
     roles: [orchestrator, author, long_context_sensitive, judge_sensitive]
-  claude-opus-4-8:
+  claude-opus-5:
     provider: anthropic
     price: { in: 5.00, out: 25.00 }
     context: 1000000
     status: active
     eol_date: null
     roles: [orchestrator_hard, meta_judge]
-  gemini-2.5-flash-lite:
+  gemini-3.5-flash-lite:
     provider: google
-    price: { in: 0.10, out: 0.40 }
+    price: { in: 0.30, out: 2.50 }   # successor Google names for 2.5-flash-lite; live-tested 2026-09-22
     context: 1000000
     status: active
     eol_date: null
     roles: [prefilter, router]
-  gemini-3.5-flash:
+  gemini-3.8-flash:
     provider: google
-    price: { in: 0.50, out: 3.00 }   # TODO confirm 3.5-flash rate; carried over from 3-flash
+    price: { in: 0.75, out: 3.75 }   # promotional rate through 2026-12-31 — re-check in January
     context: 1000000
     status: active
     eol_date: null
     roles: [judge, long_context_open]
-  deepseek-v4-flash:
+  deepseek-flash:
     provider: deepseek
-    price: { in: 0.14, out: 0.28 }
+    price: { in: 0.15, out: 0.60 }   # OFF-PEAK. Peak (01-04 & 06-10 UTC, Mon-Fri) doubles to 0.30/1.20
     context: 1000000
     status: active
     eol_date: null
     roles: [worker, long_context_open]
   deepseek-v4-pro:
     provider: deepseek
-    price: { in: 1.74, out: 3.48 }
+    price: { in: 0.66, out: 1.98 }   # OFF-PEAK. Peak doubles to 1.32/3.96
     context: 1000000
     status: active
     eol_date: null
     roles: [reasoner, red_team_routine]
-  gpt-5.5-codex:
+  gpt-5.6-terra:
     provider: openai
-    api_model: gpt-5.5     # 'gpt-5.5-codex' 404s (no such id); flagship gpt-5.5 is accessible + a stronger reasoner for non-code review
-    price: { in: 1.75, out: 14.00 }   # confirm 5.5-codex rate; 5.2/5.3-codex = 1.75/14
-    context: 400000
+    price: { in: 2.00, out: 12.00 }
+    context: 272000                  # conservative: gpt-5.5 documents 272K; terra's limit unpublished
     status: active
     eol_date: null
     roles: [red_team_code]
+  # --- OpenAI top tier: open lane only, reachable via `--worker`. No role
+  # --- assignment, so adding these changes no automatic routing.
+  gpt-5.6-sol:
+    provider: openai
+    price: { in: 4.00, out: 20.00 }  # per developers.openai.com; one tracker says 5.00/30.00 — re-confirm before bulk use
+    context: 272000                  # unpublished; conservative carry-over
+    status: active
+    eol_date: null
+    roles: []
+  gpt-6-astra:
+    provider: openai
+    price: { in: 10.00, out: 50.00 } # long-context tier bills 20.00/75.00
+    context: 272000                  # unpublished; conservative carry-over
+    status: active
+    eol_date: null
+    roles: []
   mistral-small:
     provider: mistral
-    api_model: mistral-small-latest   # provider API id (display key stays stable)
-    price: { in: 0.15, out: 0.60 }    # trackers vary 0.10-0.20 in / 0.30-0.60 out
+    api_model: mistral-small-latest   # provider API id (display key stays stable) = Mistral Small 4
+    price: { in: 0.15, out: 0.60 }    # verified unchanged
     context: 128000
     status: active
     eol_date: null
     roles: [worker_sensitive, prefilter_sensitive]
-  mistral-magistral-medium:
+  mistral-medium-3-5:
     provider: mistral
-    api_model: magistral-medium-latest   # the API rejected 'mistral-magistral-medium' (400 invalid_model)
-    price: { in: 2.00, out: 5.00 }
-    context: 128000
+    api_model: mistral-medium-latest  # = Mistral Medium 3.5
+    price: { in: 1.50, out: 7.50 }
+    context: 128000                   # unpublished; conservative carry-over
     status: active
     eol_date: null
     roles: [reasoner_sensitive, red_team_sensitive]
@@ -104,21 +141,35 @@ models:
     status: retired
     eol_date: 2026-07-24
     roles: []
+  gemini-2.5-flash-lite:
+    provider: google
+    price: { in: 0.10, out: 0.40 }
+    context: 1000000
+    status: retired          # 404 for this key: "no longer available to new users" (seen 2026-09-22)
+    eol_date: 2026-09-22
+    roles: []
+  deepseek-v4-flash:
+    provider: deepseek
+    price: { in: 0.14, out: 0.28 }
+    context: 1000000
+    status: retired          # delisted by provider ~2026-09-10; id no longer resolves
+    eol_date: 2026-09-10
+    roles: []
 
 # ---- Role -> model resolution -----------------------------------------
 # Sensitive tasks must resolve within the trusted lane (enforced at load).
 roles:
-  orchestrator:   { default: claude-sonnet-4-6, hard: claude-opus-4-8 }
-  prefilter:      { open: gemini-2.5-flash-lite, sensitive: mistral-small }
-  worker:         { open: deepseek-v4-flash,     sensitive: mistral-small }
-  long_context:   { open: gemini-3.5-flash,      sensitive: claude-sonnet-4-6 }
-  reasoner:       { open: deepseek-v4-pro,        sensitive: mistral-magistral-medium }
+  orchestrator:   { default: claude-sonnet-5, hard: claude-opus-5 }
+  prefilter:      { open: gemini-3.5-flash-lite, sensitive: mistral-small }
+  worker:         { open: deepseek-flash,        sensitive: mistral-small }
+  long_context:   { open: gemini-3.8-flash,      sensitive: claude-sonnet-5 }
+  reasoner:       { open: deepseek-v4-pro,       sensitive: mistral-medium-3-5 }
   red_team:
     routine:             deepseek-v4-pro
-    code:                gpt-5.5-codex
-    code_sensitive:      gpt-5.5-codex     # via OpenAI EU residency endpoint
-    reasoning_sensitive: mistral-magistral-medium
-  judge:          { default: gemini-3.5-flash, meta: claude-opus-4-8 }
+    code:                gpt-5.6-terra
+    code_sensitive:      gpt-5.6-terra     # via OpenAI EU residency endpoint (see lane note)
+    reasoning_sensitive: mistral-medium-3-5
+  judge:          { default: gemini-3.8-flash, meta: claude-opus-5 }
 
 # ---- Thresholds (defaults; tune from logs after the P1 week) ----------
 thresholds:
@@ -134,3 +185,4 @@ adaptive:
   metric: cost_per_accepted_output
   refresh_cadence_days: 30        # re-check market prices / capabilities
   require_human_approval: true    # always; trusted-lane changes are hard-gated
+  last_verified: 2026-09-22       # manual price/ID verification against provider pages

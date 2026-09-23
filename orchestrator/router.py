@@ -20,7 +20,11 @@ class RoutingError(Exception):
 def route(task: dict, cfg: dict) -> tuple[str, str | None]:
     """
     Returns (model_name, endpoint_url).
-    endpoint_url is None unless an EU residency endpoint is required.
+    endpoint_url is None unless config.providers.<provider>.eu_endpoint is set
+    for a sensitive call. As of 2026-09-23 openai.eu_endpoint is null by owner
+    authorisation (EU residency is unavailable on the account), so sensitive
+    OpenAI calls go to the standard endpoint. Setting it back restores residency
+    routing with no code change.
     """
     sensitive = task.get("sensitive", False)
     task_type = task.get("type", "code")

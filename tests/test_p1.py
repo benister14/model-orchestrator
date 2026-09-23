@@ -100,8 +100,8 @@ def test_router_default_routes_to_open_worker():
     task = {"description": "scaffold a CRUD API", "type": "code",
             "complexity": 1, "risk": "low", "sensitive": False}
     model_name, endpoint = route(task, cfg)
-    # Default (non-sensitive, low complexity) → worker open → deepseek-v4-flash
-    assert model_name == "deepseek-v4-flash"
+    # Default (non-sensitive, low complexity) → worker open → deepseek-flash
+    assert model_name == "deepseek-flash"
     assert endpoint is None
 
 
@@ -119,7 +119,7 @@ def test_router_raises_lane_violation_for_bad_config():
     cfg = load_config()
     bad_cfg = copy.deepcopy(cfg)
     # Point the sensitive worker slot at deepseek (untrusted provider)
-    bad_cfg["roles"]["worker"]["sensitive"] = "deepseek-v4-flash"
+    bad_cfg["roles"]["worker"]["sensitive"] = "deepseek-flash"
     task = {"description": "process client data", "type": "batch",
             "complexity": 1, "risk": "low", "sensitive": True}
     with pytest.raises(LaneViolationError):
@@ -131,7 +131,7 @@ def test_router_high_risk_routes_to_orchestrator():
     task = {"description": "design auth system", "type": "architecture",
             "complexity": 4, "risk": "high", "sensitive": False}
     model_name, endpoint = route(task, cfg)
-    assert model_name == "claude-sonnet-4-6"
+    assert model_name == "claude-sonnet-5"
 
 
 def test_router_long_context_routes_to_long_context_lane():
@@ -147,7 +147,7 @@ def test_router_long_context_routes_to_long_context_lane():
 def test_router_sensitive_low_complexity_routes_to_mistral():
     cfg = load_config()
     # Sensitive batch task, complexity=1 — should go to worker.sensitive (mistral-small),
-    # NOT to the orchestrator (claude-sonnet-4-6). The trusted lane handles safety;
+    # NOT to the orchestrator (claude-sonnet-5). The trusted lane handles safety;
     # orchestrator is reserved for architecture and high-complexity tasks.
     task = {"description": "normalise client contact records", "type": "batch",
             "complexity": 1, "risk": "high", "sensitive": True}

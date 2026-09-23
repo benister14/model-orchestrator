@@ -11,8 +11,12 @@ class OpenAIAdapter(Adapter):
     Unlike the other OpenAI-compatible adapters (deepseek/mistral/google), this one
     has no fixed base URL: it uses the SDK default (api.openai.com) for normal calls,
     and switches to a data-residency endpoint when one is passed via `endpoint=`.
-    Sensitive calls MUST route through the EU residency endpoint — the router
-    supplies it (config.providers.openai.eu_endpoint) and the CLI forwards it here.
+
+    Whether sensitive calls get a residency endpoint is a CONFIG decision, not an
+    adapter one: the router passes config.providers.openai.eu_endpoint and the CLI
+    forwards it here. As of 2026-09-23 that value is null by owner authorisation
+    (EU residency is unavailable on this account), so sensitive OpenAI traffic is
+    processed in the US under the DPA/SCCs. This adapter is agnostic either way.
     """
 
     def __init__(self) -> None:
