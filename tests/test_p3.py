@@ -102,3 +102,26 @@ def test_dry_run_long_context_routes_via_cli(capsys):
     out = capsys.readouterr().out
     assert "gemini-3.8-flash" in out
     assert "[dry-run]" in out
+
+
+# ---- --worker must respect retirement ------------------------------------
+
+def test_worker_pin_rejects_retired_model(capsys):
+    """A retired roster entry must not be pinnable.
+
+    Retired models stay in config.yaml for reference, but they no longer
+    resolve at their providers. Before 2026-09-23 --worker validated against
+    the raw registry, so pinning one passed validation and failed later as an
+    opaque provider 404.
+    """
+    from orchestrator.cli import main
+    ret = main(["route", "x", "--worker", "deepseek-v4-flash", "--dry-run"])
+    assert ret == 1
+    assert "retired" in capsys.readouterr().err
+
+
+def test_worker_pin_accepts_active_model(capsys):
+    from orchestrator.cli import main
+    ret = main(["route", "x", "--worker", "gemini-3.8-flash", "--dry-run"])
+    assert ret == 0
+    assert "gemini-3.8-flash" in capsys.readouterr().out

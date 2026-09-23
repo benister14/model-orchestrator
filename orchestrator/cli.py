@@ -83,8 +83,15 @@ def cmd_route(args) -> int:
     # opinion the router wouldn't pick). Still honours the trusted-lane invariant
     # for sensitive tasks; recomputes the EU endpoint for a sensitive OpenAI worker.
     if args.worker:
-        if args.worker not in cfg.get("models", {}):
-            print(f"error: --worker '{args.worker}' is not in the roster", file=sys.stderr)
+        # Validate against the EFFECTIVE roster, not the raw registry: retired and
+        # past-EOL entries stay in config.yaml for reference, and pinning one used
+        # to sail past this check and fail later at the provider (observed
+        # 2026-09-23 with deepseek-v4-flash and gemini-2.5-flash-lite, both of
+        # which no longer resolve at their providers).
+        if args.worker not in effective_models(cfg):
+            retired = args.worker in cfg.get("models", {})
+            reason = "is retired / past its eol_date" if retired else "is not in the roster"
+            print(f"error: --worker '{args.worker}' {reason}", file=sys.stderr)
             return 1
         model_name = args.worker
         wprov = cfg["models"][model_name].get("provider")
