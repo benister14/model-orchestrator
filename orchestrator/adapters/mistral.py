@@ -2,7 +2,7 @@ import os
 
 from openai import OpenAI
 
-from .base import Adapter, message_text
+from .base import Adapter, answer_text
 
 _BASE_URL = "https://api.mistral.ai/v1"
 
@@ -31,4 +31,4 @@ class MistralAdapter(Adapter):
             max_tokens=max_tokens,
             messages=messages,
         )
-        return message_text(response.choices[0].message)
+        return answer_text(response)

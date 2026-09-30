@@ -177,7 +177,7 @@ thresholds:
   debate:               { max_rounds: 2, stop_score_gap: 0.10 }
   escalate_to_claude_when_judge_below: 0.75
   fact_flags_escalate_above: 2
-  cost_ceiling_per_session_usd: 2.00   # placeholder; raise as needed
+  cost_ceiling_per_session_usd: 10.00  # PER DAY in practice: gate.py sums today's log (~/.orchestrator/logs/<date>.jsonl). Raised 2.00 -> 10.00 on 2026-09-28 (Benjamin): the $2 placeholder blocked a 4-batch corpus review at $1.82.
 
 # ---- Adaptive roster (P7 — built on the P4 logs) ----------------------
 adaptive:
