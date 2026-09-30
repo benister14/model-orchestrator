@@ -45,7 +45,9 @@ def test_gate_raises_on_cost_ceiling_breach(monkeypatch):
         monkeypatch.setenv("ORCHESTRATOR_LOG_DIR", log_dir)
         log_file = Path(log_dir) / f"{date.today().isoformat()}.jsonl"
         log_file.write_text(
-            json.dumps({"ts": "2026-06-12T00:00:00Z", "event": "route", "cost_usd": 2.01}) + "\n",
+            # Just over the CONFIGURED ceiling (it was raised 2.00 -> 10.00 on 2026-09-28).
+            json.dumps({"ts": "2026-06-12T00:00:00Z", "event": "route",
+                        "cost_usd": cfg["thresholds"]["cost_ceiling_per_session_usd"] + 0.01}) + "\n",
             encoding="utf-8",
         )
         # Zero-cost call should still be blocked because current_spend > ceiling.
