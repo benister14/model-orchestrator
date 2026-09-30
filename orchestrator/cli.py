@@ -108,6 +108,15 @@ def cmd_route(args) -> int:
     trusted_providers = set(cfg["lanes"]["trusted"]["providers"])
     lane = "trusted" if provider in trusted_providers else "open"
 
+    thinking = getattr(args, "thinking", None)
+    if thinking:
+        from .adapters.base import thinking_params
+        try:
+            thinking_params(provider, thinking)
+        except ValueError as e:
+            print(f"error: {e} (model '{model_name}')", file=sys.stderr)
+            return 1
+
     # Estimate cost at 1 000 in + 500 out tokens (rough single-call estimate)
     est_cost = (1_000 / 1_000_000 * price.get("in", 0) +
                 500 / 1_000_000 * price.get("out", 0))
@@ -121,6 +130,8 @@ def cmd_route(args) -> int:
     print(f"sensitive: {tagged.get('sensitive', False)}")
     if endpoint:
         print(f"endpoint:  {endpoint}")
+    if thinking:
+        print(f"thinking:  {thinking}")
     print(f"est. cost: ${est_cost:.6f}  (1 000 in + 500 out tokens)")
 
     if args.dry_run:
@@ -150,7 +161,8 @@ def cmd_route(args) -> int:
         # adapters that ignore it (deepseek/mistral/google/anthropic) accept **kwargs.
         output = adapter.complete(prompt=tagged["description"],
                                   model=api_model_of(model_name, cfg),
-                                  endpoint=endpoint, max_tokens=args.max_tokens)
+                                  endpoint=endpoint, max_tokens=args.max_tokens,
+                                  thinking=thinking)
     except Exception as e:
         print(f"API error: {e}", file=sys.stderr)
         return 1
@@ -271,6 +283,10 @@ def main(argv=None) -> int:
                    help="force the reasoning lane (chain-of-thought reasoner)")
     r.add_argument("--max-tokens", type=int, default=2048, dest="max_tokens",
                    help="max output tokens for the worker call (default 2048; raise for long analyses)")
+    r.add_argument("--thinking", default=None, choices=["off", "low", "medium", "high"],
+                   help="reasoning effort for reasoning models (deepseek: off|low|medium|high; "
+                        "openai: low|medium|high). Hidden reasoning counts against --max-tokens: "
+                        "a long batch prompt can spend the whole budget before any answer")
     r.add_argument("--worker", default=None,
                    help="pin a specific roster model as the worker (e.g. for a cross-provider second opinion)")
     r.add_argument("--judge", action="store_true",

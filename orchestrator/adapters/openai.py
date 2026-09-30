@@ -2,7 +2,7 @@ import os
 
 from openai import OpenAI
 
-from .base import Adapter, message_text
+from .base import Adapter, answer_text, thinking_params
 
 
 class OpenAIAdapter(Adapter):
@@ -45,5 +45,6 @@ class OpenAIAdapter(Adapter):
             model=model,
             max_completion_tokens=max_tokens,
             messages=messages,
+            **thinking_params("openai", kwargs.get("thinking")),
         )
-        return message_text(response.choices[0].message)
+        return answer_text(response)
